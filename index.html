@@ -30,6 +30,7 @@
         .adjusted-color { background: #fff8e1; }
         .points-color { background: #f3e5f5; }
         .scoring-color { background: #e0f7fa; }
+        .ranking-color { background: #fff3e0; }
         
         /* Conditional Color Classes */
         .home-high { background: #66bb6a !important; color: white; }
@@ -271,32 +272,67 @@ function getColorClass(value, type, isHome) {
     return '';
 }
 
-// 🔧 HELPER: Calculate Scoring Rate (✅ FIXED - မင်းပြောတဲ့ဖော်မြူလာအတိုင်း)
+// HELPER: Calculate Scoring Rate
 function calculateScoringRate(hTeam, aTeam) {
-    // Home team's HOME matches only
     const hHomeMatches = rawData.filter(m => m.HomeTeam === hTeam);
-    // Away team's AWAY matches only
     const aAwayMatches = rawData.filter(m => m.AwayTeam === aTeam);
     
-    // Total matches = Home team's home matches + Away team's away matches
     const totalMatches = hHomeMatches.length + aAwayMatches.length;
     
     if (totalMatches === 0) return "0";
     
-    // ✅ Home Score Rate = (Home ဂိုးသွင်းနိုင်သောပွဲ + Away ဂိုးပေးရသောပွဲ) ÷ Total
     const hScoredMatches = hHomeMatches.filter(m => (m.FTHG||0) > 0).length;
     const aConcededMatches = aAwayMatches.filter(m => (m.FTHG||0) > 0).length;
     const homeScoreRate = (hScoredMatches + aConcededMatches) / totalMatches;
     
-    // ✅ Away Score Rate = (Away ဂိုးသွင်းနိုင်သောပွဲ + Home ဂိုးပေးရသောပွဲ) ÷ Total
     const aScoredMatches = aAwayMatches.filter(m => (m.FTAG||0) > 0).length;
     const hConcededMatches = hHomeMatches.filter(m => (m.FTAG||0) > 0).length;
     const awayScoreRate = (aScoredMatches + hConcededMatches) / totalMatches;
     
-    // ✅ Final Scoring Rate = Home Score Rate - Away Score Rate
     const scoringRateResult = Math.round((homeScoreRate - awayScoreRate) * 100);
     
     return scoringRateResult.toString();
+}
+
+// 🔧 HELPER: Get Team Ranking from Overall All Table (အသစ်ထည့်ထားသည်)
+function getTeamRanking(team) {
+    let stats = {};
+    const teams = [...new Set(rawData.map(d => d.HomeTeam))];
+    
+    teams.forEach(t => {
+        let matches = rawData.filter(m => m.HomeTeam === t || m.AwayTeam === t);
+        stats[t] = {p:0, w:0, d:0, l:0, gf:0, ga:0, pts:0};
+        
+        matches.forEach(m => {
+            if (m.HomeTeam === t) {
+                stats[t].p++; 
+                stats[t].gf += (m.FTHG||0); 
+                stats[t].ga += (m.FTAG||0);
+                if(m.FTR === 'H') { stats[t].w++; stats[t].pts += 3; } 
+                else if(m.FTR === 'D') { stats[t].d++; stats[t].pts += 1; } 
+                else stats[t].l++;
+            } else if (m.AwayTeam === t) {
+                stats[t].p++; 
+                stats[t].gf += (m.FTAG||0); 
+                stats[t].ga += (m.FTHG||0);
+                if(m.FTR === 'A') { stats[t].w++; stats[t].pts += 3; } 
+                else if(m.FTR === 'D') { stats[t].d++; stats[t].pts += 1; } 
+                else stats[t].l++;
+            }
+        });
+    });
+    
+    // Sort by Points (desc), then Goal Difference (desc)
+    const sortedTeams = Object.keys(stats).sort((a, b) => {
+        if (stats[b].pts !== stats[a].pts) return stats[b].pts - stats[a].pts;
+        return (stats[b].gf - stats[b].ga) - (stats[a].gf - stats[a].ga);
+    });
+    
+    // Find ranking position
+    const rank = sortedTeams.indexOf(team) + 1;
+    const total = sortedTeams.length;
+    
+    return { rank, total };
 }
 
 // Main Prediction Logic
@@ -353,8 +389,14 @@ function calculatePrediction() {
     const hPointsGD = `${hLast6.pts}/${hLast6.gd}`;
     const aPointsGD = `${aLast6.pts}/${aLast6.gd}`;
 
-    // 🆕 SCORING RATE Calculation (Fixed)
+    // SCORING RATE Calculation
     const scoringRate = calculateScoringRate(hTeam, aTeam);
+
+    // 🆕 RANKING Calculation
+    const hRanking = getTeamRanking(hTeam);
+    const aRanking = getTeamRanking(aTeam);
+    const hRankDisplay = `${hRanking.rank}/${hRanking.total}`;
+    const aRankDisplay = `${aRanking.rank}/${aRanking.total}`;
 
     // Get Color Classes
     const ovHWClass = getColorClass(ovHW, 'overall', true);
@@ -396,6 +438,12 @@ function calculatePrediction() {
             <td>${hPointsGD}</td>
             <td>-</td>
             <td>${aPointsGD}</td>
+        </tr>
+        <tr class="result-row ranking-color">
+            <td>📈 Ranking</td>
+            <td>${hRankDisplay}</td>
+            <td>-</td>
+            <td>${aRankDisplay}</td>
         </tr>
         <tr class="result-row scoring-color">
             <td>⚽ Scoring Rate</td>
