@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+    <meta charset="UTF-8">
+    <title>Football Stats & Prediction System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .controls { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+        button { padding: 10px 15px; cursor: pointer; background: #34495e; color: white; border: none; border-radius: 5px; font-weight: bold; }
+        button:hover { background: #2c3e50; }
+        .btn-other { background: #e67e22; }
+        .btn-other:hover { background: #d35400; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px; }
+        select, input { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #ccc; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
+        th { background: #2c3e50; color: white; }
+        .btn-calc { background: #27ae60; width: 100%; font-size: 16px; margin-top: 10px; color: white; border: none; padding: 15px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .btn-calc:hover { background: #219a52; }
+        .result-row { font-weight: bold; }
+        
+        /* Base Colors */
+        .prob-color { background: #e8f5e9; }
+        .odds-color { background: #fff3e0; }
+        .winrate-color { background: #e3f2fd; }
+        .matchodd-color { background: #fce4ec; }
+        .adjusted-color { background: #fff8e1; }
+        .points-color { background: #f3e5f5; }
+        .scoring-color { background: #e0f7fa; }
+        
+        /* Conditional Color Classes */
+        .home-high { background: #66bb6a !important; color: white; }
+        .away-high { background: #ef5350 !important; color: white; }
+        
+        .hidden-row { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="border-left: 5px solid #27ae60; padding-left: 10px;">⚽ Football Stats & Prediction</h2>
+    <div class="controls">
+        <input type="file" id="csvUpload" accept=".csv" style="margin-bottom: 15px;">
+        <div class="btn-group">
+            <button onclick="displayLeagueTable('overall', 'all')">Overall All</button>
+            <button onclick="displayLeagueTable('overall', 'home')">Overall Home</button>
+            <button onclick="displayLeagueTable('overall', 'away')">Overall Away</button>
+            <button onclick="displayLeagueTable('last6', 'all')">Last 6 All</button>
+            <button onclick="displayLeagueTable('last6', 'home')">Last 6 Home</button>
+            <button onclick="displayLeagueTable('last6', 'away')">Last 6 Away</button>
+        </div>
+        <div class="grid">
+            <select id="homeTeam"><option value="">Home Team ရွေးပါ</option></select>
+            <select id="awayTeam"><option value="">Away Team ရွေးပါ</option></select>
+        </div>
+        <button class="btn-calc" onclick="calculatePrediction()">Calculate Prediction</button>
+        <button class="btn-other" onclick="toggleOtherRows()" style="width: 100%; margin-top: 10px;">📊 Other (Show/Hide)</button>
+    </div>
+    <table id="mainTable">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<script>
+let rawData = [];
+let showOtherRows = false;
+
+// CSV Parsing
+document.getElementById('csvUpload').addEventListener('change', (e) => {
+    Papa.parse(e.target.files[0], { 
+        header: true, 
+        dynamicTyping: true, 
+        skipEmptyLines: true, 
+        complete: (res) => {
+            rawData = res.data
+                .filter(d => d.HomeTeam && d.AwayTeam && d.FTR)
+                .sort((a, b) => {
+                    if (a.Date && b.Date) {
+                        return new Date(a.Date) - new Date(b.Date);
+                    }
+                    return 0;
+                });
+            
+            const teams = [...new Set(rawData.map(d => d.HomeTeam))].sort();
+            const hS = document.getElementById('homeTeam'), aS = document.getElementById('awayTeam');
+            hS.innerHTML = aS.innerHTML = '<option value="">အသင်းရွေးပါ</option>';
+            teams.forEach(t => { 
+                hS.add(new Option(t, t)); 
+                aS.add(new Option(t, t)); 
+            });
+            alert("Data Loaded Successfully! (" + rawData.length + " matches)");
+        }
+    });
+});
+
+// League Table Display Logic
+function displayLeagueTable(type, loc) {
+    if (rawData.length === 0) {
+        alert("⚠️ ပထမဆုံး CSV file အရင်တင်ပါ။");
+        return;
+    }
+    
+    let stats = {};
+    const teams = [...new Set(rawData.map(d => d.HomeTeam))];
+    
+    teams.forEach(t => {
+        let allMatches = rawData.filter(m => m.HomeTeam === t || m.AwayTeam === t);
+        
+        let matches;
+        if (type === 'last6') {
+            matches = allMatches.slice(-6);
+            
+            if (loc === 'home') {
+                matches = matches.filter(m => m.HomeTeam === t);
+            } else if (loc === 'away') {
+                matches = matches.filter(m => m.AwayTeam === t);
+            }
+        } else {
+            matches = allMatches;
+            
+            if (loc === 'home') {
+                matches = matches.filter(m => m.HomeTeam === t);
+            } else if (loc === 'away') {
+                matches = matches.filter(m => m.AwayTeam === t);
+            }
+        }
+        
+        stats[t] = {p:0, w:0, d:0, l:0, gf:0, ga:0, pts:0};
+        
+        matches.forEach(m => {
+            if (m.HomeTeam === t) {
+                stats[t].p++; 
+                stats[t].gf += (m.FTHG||0); 
+                stats[t].ga += (m.FTAG||0);
+                if(m.FTR === 'H') { stats[t].w++; stats[t].pts += 3; } 
+                else if(m.FTR === 'D') { stats[t].d++; stats[t].pts += 1; } 
+                else stats[t].l++;
+            } else if (m.AwayTeam === t) {
+                stats[t].p++; 
+                stats[t].gf += (m.FTAG||0); 
+                stats[t].ga += (m.FTHG||0);
+                if(m.FTR === 'A') { stats[t].w++; stats[t].pts += 3; } 
+                else if(m.FTR === 'D') { stats[t].d++; stats[t].pts += 1; } 
+                else stats[t].l++;
+            }
+        });
+    });
+    
+    document.getElementById('tableHead').innerHTML = "<tr><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>";
+    document.getElementById('tableBody').innerHTML = Object.keys(stats).sort((a,b) => stats[b].pts - stats[a].pts)
+        .map(t => `<tr><td>${t}</td><td>${stats[t].p}</td><td>${stats[t].w}</td><td>${stats[t].d}</td><td>${stats[t].l}</td><td>${stats[t].gf}</td><td>${stats[t].ga}</td><td>${stats[t].gf - stats[t].ga}</td><td>${stats[t].pts}</td></tr>`).join('');
+}
+
+// Poisson Math
+function factorial(n) { return n <= 1 ? 1 : n * factorial(n - 1); }
+function poissonProb(k, lambda) { return (Math.exp(-lambda) * Math.pow(lambda, k)) / factorial(k); }
+function getRawPoissonProb(hL, aL) {
+    let hw = 0, dr = 0, aw = 0;
+    for (let h = 0; h <= 6; h++) {
+        for (let a = 0; a <= 6; a++) {
+            let p = poissonProb(h, hL) * poissonProb(a, aL);
+            if (h > a) hw += p;
+            else if (h === a) dr += p;
+            else aw += p;
+        }
+    }
+    return { hw: hw * 100, dr: dr * 100, aw: aw * 100 };
+}
+
+// HELPER: Get team stats by location
+function getTeamStatsByLocation(team, isHome) {
+    let w = 0, d = 0, l = 0;
+    const matches = rawData.filter(m => isHome ? m.HomeTeam === team : m.AwayTeam === team);
+    matches.forEach(m => {
+        if (isHome) {
+            if (m.FTR === 'H') w++;
+            else if (m.FTR === 'D') d++;
+            else l++;
+        } else {
+            if (m.FTR === 'A') w++;
+            else if (m.FTR === 'D') d++;
+            else l++;
+        }
+    });
+    return { w, d, l };
+}
+
+// HELPER: Calculate Win Rate + Draw Rate
+function calculateWinRate(hTeam, aTeam) {
+    const hHome = getTeamStatsByLocation(hTeam, true);
+    const aAway = getTeamStatsByLocation(aTeam, false);
+    
+    const totalMatches = hHome.w + hHome.d + hHome.l + aAway.w + aAway.d + aAway.l;
+    if (totalMatches === 0) return { homeWR: "0.00", drawRate: "0.00", awayWR: "0.00" };
+    
+    const homeNumerator = hHome.w + aAway.l;
+    const homeWR = (homeNumerator / totalMatches).toFixed(2);
+    
+    const drawNumerator = hHome.d + aAway.d;
+    const drawRate = (drawNumerator / totalMatches).toFixed(2);
+    
+    const awayNumerator = aAway.w + hHome.l;
+    const awayWR = (awayNumerator / totalMatches).toFixed(2);
+    
+    return { homeWR, drawRate, awayWR };
+}
+
+// HELPER: Calculate Match Decimal Odd
+function calculateMatchDecimalOdd(winRate) {
+    const homeOdd = winRate.homeWR > 0 ? (0.975 / parseFloat(winRate.homeWR)).toFixed(2) : "0.00";
+    const drawOdd = winRate.drawRate > 0 ? (0.975 / parseFloat(winRate.drawRate)).toFixed(2) : "0.00";
+    const awayOdd = winRate.awayWR > 0 ? (0.975 / parseFloat(winRate.awayWR)).toFixed(2) : "0.00";
+    
+    return { homeOdd, drawOdd, awayOdd };
+}
+
+// Helper Functions for Last 6 All Matches
+function getLastNAllMatches(team, n = 6) {
+    return rawData.filter(m => m.HomeTeam === team || m.AwayTeam === team).slice(-n);
+}
+function getGoalsFromMatches(matches, team) {
+    let scored = 0, conceded = 0;
+    matches.forEach(m => {
+        if (m.HomeTeam === team) { scored += (m.FTHG||0); conceded += (m.FTAG||0); }
+        else { scored += (m.FTAG||0); conceded += (m.FTHG||0); }
+    });
+    return { scored, conceded };
+}
+
+// HELPER: Get Last 6 Points and Goal Difference
+function getLast6PointsAndGD(team) {
+    const matches = getLastNAllMatches(team, 6);
+    let pts = 0, gf = 0, ga = 0;
+    
+    matches.forEach(m => {
+        if (m.HomeTeam === team) {
+            gf += (m.FTHG||0);
+            ga += (m.FTAG||0);
+            if (m.FTR === 'H') pts += 3;
+            else if (m.FTR === 'D') pts += 1;
+        } else {
+            gf += (m.FTAG||0);
+            ga += (m.FTHG||0);
+            if (m.FTR === 'A') pts += 3;
+            else if (m.FTR === 'D') pts += 1;
+        }
+    });
+    
+    const gd = gf - ga;
+    return { pts, gd };
+}
+
+// HELPER: Get Color Class based on thresholds
+function getColorClass(value, type, isHome) {
+    const numValue = parseFloat(value);
+    
+    if (isHome) {
+        if (type === 'overall' && numValue >= 55) return 'home-high';
+        if (type === 'last6' && numValue >= 43) return 'home-high';
+        if (type === 'winrate' && numValue >= 0.4) return 'home-high';
+    } else {
+        if (type === 'overall' && numValue >= 50) return 'away-high';
+        if (type === 'last6' && numValue >= 43) return 'away-high';
+        if (type === 'winrate' && numValue >= 0.33) return 'away-high';
+    }
+    
+    return '';
+}
+
+// 🔧 HELPER: Calculate Scoring Rate (✅ FIXED - မင်းပြောတဲ့ဖော်မြူလာအတိုင်း)
+function calculateScoringRate(hTeam, aTeam) {
+    // Home team's HOME matches only
+    const hHomeMatches = rawData.filter(m => m.HomeTeam === hTeam);
+    // Away team's AWAY matches only
+    const aAwayMatches = rawData.filter(m => m.AwayTeam === aTeam);
+    
+    // Total matches = Home team's home matches + Away team's away matches
+    const totalMatches = hHomeMatches.length + aAwayMatches.length;
+    
+    if (totalMatches === 0) return "0";
+    
+    // ✅ Home Score Rate = (Home ဂိုးသွင်းနိုင်သောပွဲ + Away ဂိုးပေးရသောပွဲ) ÷ Total
+    const hScoredMatches = hHomeMatches.filter(m => (m.FTHG||0) > 0).length;
+    const aConcededMatches = aAwayMatches.filter(m => (m.FTHG||0) > 0).length;
+    const homeScoreRate = (hScoredMatches + aConcededMatches) / totalMatches;
+    
+    // ✅ Away Score Rate = (Away ဂိုးသွင်းနိုင်သောပွဲ + Home ဂိုးပေးရသောပွဲ) ÷ Total
+    const aScoredMatches = aAwayMatches.filter(m => (m.FTAG||0) > 0).length;
+    const hConcededMatches = hHomeMatches.filter(m => (m.FTAG||0) > 0).length;
+    const awayScoreRate = (aScoredMatches + hConcededMatches) / totalMatches;
+    
+    // ✅ Final Scoring Rate = Home Score Rate - Away Score Rate
+    const scoringRateResult = Math.round((homeScoreRate - awayScoreRate) * 100);
+    
+    return scoringRateResult.toString();
+}
+
+// Main Prediction Logic
+function calculatePrediction() {
+    const hTeam = document.getElementById('homeTeam').value, aTeam = document.getElementById('awayTeam').value;
+    if (!hTeam || !aTeam) return;
+
+    // OVERALL Logic
+    const avgHG = rawData.reduce((s, m) => s + m.FTHG, 0) / rawData.length;
+    const avgAG = rawData.reduce((s, m) => s + m.FTAG, 0) / rawData.length;
+    const hS = rawData.filter(m => m.HomeTeam === hTeam), aS = rawData.filter(m => m.AwayTeam === aTeam);
+    
+    const hL_ov = (hS.reduce((s, m) => s + m.FTHG, 0) / (hS.length || 1) / avgHG) * (aS.reduce((s, m) => s + m.FTHG, 0) / (aS.length || 1) / avgHG) * avgHG;
+    const aL_ov = (aS.reduce((s, m) => s + m.FTAG, 0) / (aS.length || 1) / avgAG) * (hS.reduce((s, m) => s + m.FTAG, 0) / (hS.length || 1) / avgAG) * avgAG;
+    
+    const ovRaw = getRawPoissonProb(hL_ov, aL_ov);
+    let ovHW = Math.round(ovRaw.hw), ovDR = Math.round(ovRaw.dr);
+    let ovAW = 100 - ovHW - ovDR;
+
+    // LAST 6 Logic
+    const hAllL6 = getLastNAllMatches(hTeam, 6);
+    const aAllL6 = getLastNAllMatches(aTeam, 6);
+    const hGoals = getGoalsFromMatches(hAllL6, hTeam);
+    const aGoals = getGoalsFromMatches(aAllL6, aTeam);
+    
+    const hL_form = (hGoals.scored + aGoals.conceded) / 12;
+    const aL_form = (aGoals.scored + hGoals.conceded) / 12;
+    const formRaw = getRawPoissonProb(hL_form, aL_form);
+    
+    let hw6 = Math.round(formRaw.hw);
+    let dr6 = Math.round(formRaw.dr);
+    let aw6 = 100 - hw6 - dr6;
+
+    // WIN RATE Calculation
+    const winRate = calculateWinRate(hTeam, aTeam);
+    
+    // MATCH DECIMAL ODD Calculation
+    const matchOdd = calculateMatchDecimalOdd(winRate);
+    
+    // Overall & Last 6 Decimal Odds
+    const getOdds = (p) => (p > 0 ? (97.5 / p).toFixed(2) : "0.00");
+    
+    const overallOdd = { home: getOdds(ovHW), draw: getOdds(ovDR), away: getOdds(ovAW) };
+    const last6Odd = { home: getOdds(hw6), draw: getOdds(dr6), away: getOdds(aw6) };
+    
+    // ADJUSTED DECIMAL Calculation
+    const adjustedHome = ((parseFloat(overallOdd.home) + parseFloat(last6Odd.home) + parseFloat(matchOdd.homeOdd)) / 3).toFixed(2);
+    const adjustedDraw = ((parseFloat(overallOdd.draw) + parseFloat(last6Odd.draw) + parseFloat(matchOdd.drawOdd)) / 3).toFixed(2);
+    const adjustedAway = ((parseFloat(overallOdd.away) + parseFloat(last6Odd.away) + parseFloat(matchOdd.awayOdd)) / 3).toFixed(2);
+
+    // LAST 6 POINTS/GOALS Calculation
+    const hLast6 = getLast6PointsAndGD(hTeam);
+    const aLast6 = getLast6PointsAndGD(aTeam);
+    const hPointsGD = `${hLast6.pts}/${hLast6.gd}`;
+    const aPointsGD = `${aLast6.pts}/${aLast6.gd}`;
+
+    // 🆕 SCORING RATE Calculation (Fixed)
+    const scoringRate = calculateScoringRate(hTeam, aTeam);
+
+    // Get Color Classes
+    const ovHWClass = getColorClass(ovHW, 'overall', true);
+    const ovAWClass = getColorClass(ovAW, 'overall', false);
+    const hw6Class = getColorClass(hw6, 'last6', true);
+    const aw6Class = getColorClass(aw6, 'last6', false);
+    const homeWRClass = getColorClass(winRate.homeWR, 'winrate', true);
+    const awayWRClass = getColorClass(winRate.awayWR, 'winrate', false);
+
+    // UI Result Updates
+    document.getElementById('tableHead').innerHTML = "<tr><th>Category</th><th>Home (1)</th><th>Draw (X)</th><th>Away (2)</th></tr>";
+    document.getElementById('tableBody').innerHTML = `
+        <tr class="result-row prob-color">
+            <td>Overall Probability %</td>
+            <td class="${ovHWClass}">${ovHW}%</td>
+            <td>${ovDR}%</td>
+            <td class="${ovAWClass}">${ovAW}%</td>
+        </tr>
+        <tr class="result-row odds-color">
+            <td>Overall Decimal Odds</td>
+            <td>${overallOdd.home}</td>
+            <td>${overallOdd.draw}</td>
+            <td>${overallOdd.away}</td>
+        </tr>
+        <tr class="result-row prob-color" style="background:#e3f2fd;">
+            <td>Last 6 Probability %</td>
+            <td class="${hw6Class}">${hw6}%</td>
+            <td>${dr6}%</td>
+            <td class="${aw6Class}">${aw6}%</td>
+        </tr>
+        <tr class="result-row winrate-color">
+            <td>🏆 Win/Draw Rate</td>
+            <td class="${homeWRClass}">${winRate.homeWR}</td>
+            <td>${winRate.drawRate}</td>
+            <td class="${awayWRClass}">${winRate.awayWR}</td>
+        </tr>
+        <tr class="result-row points-color">
+            <td>📊 Last 6 Points/Goals</td>
+            <td>${hPointsGD}</td>
+            <td>-</td>
+            <td>${aPointsGD}</td>
+        </tr>
+        <tr class="result-row scoring-color">
+            <td>⚽ Scoring Rate</td>
+            <td colspan="3" style="text-align:center; font-size:18px;">${scoringRate}</td>
+        </tr>
+        <tr class="result-row adjusted-color">
+            <td>⚖️ Adjusted Decimal</td>
+            <td>${adjustedHome}</td>
+            <td>${adjustedDraw}</td>
+            <td>${adjustedAway}</td>
+        </tr>
+        <tr class="result-row odds-color hidden-row" id="row-last6-odd">
+            <td>Last 6 Decimal Odds</td>
+            <td>${last6Odd.home}</td>
+            <td>${last6Odd.draw}</td>
+            <td>${last6Odd.away}</td>
+        </tr>
+        <tr class="result-row matchodd-color hidden-row" id="row-match-odd">
+            <td>💰 Match Decimal Odd</td>
+            <td>${matchOdd.homeOdd}</td>
+            <td>${matchOdd.drawOdd}</td>
+            <td>${matchOdd.awayOdd}</td>
+        </tr>
+    `;
+    
+    showOtherRows = false;
+}
+
+// Toggle Other Rows
+function toggleOtherRows() {
+    showOtherRows = !showOtherRows;
+    
+    const rowLast6 = document.getElementById('row-last6-odd');
+    const rowMatch = document.getElementById('row-match-odd');
+    
+    if (rowLast6 && rowMatch) {
+        if (showOtherRows) {
+            rowLast6.classList.remove('hidden-row');
+            rowMatch.classList.remove('hidden-row');
+        } else {
+            rowLast6.classList.add('hidden-row');
+            rowMatch.classList.add('hidden-row');
+        }
+    } else {
+        alert("⚠️ ပထမဆုံး Calculate Prediction နှိပ်ပါ။");
+    }
+}
+</script>
+</body>
+</html>
