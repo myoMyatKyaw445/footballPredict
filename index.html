@@ -13,6 +13,13 @@
         button:hover { background: #2c3e50; }
         .btn-other { background: #e67e22; }
         .btn-other:hover { background: #d35400; }
+        .btn-clear { background: #e74c3c; }
+        .btn-clear:hover { background: #c0392b; }
+        .btn-save { background: #9b59b6; }
+        .btn-save:hover { background: #8e44ad; }
+        .btn-load { background: #3498db; }
+        .btn-load:hover { background: #2980b9; }
+        .btn-delete { background: #e74c3c; padding: 5px 10px; font-size: 12px; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px; }
         select, input { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #ccc; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
@@ -37,15 +44,81 @@
         .away-high { background: #ef5350 !important; color: white; }
         
         .hidden-row { display: none; }
+        
+        /* Status Badge */
+        .status-badge { 
+            display: inline-block; 
+            padding: 5px 15px; 
+            border-radius: 20px; 
+            font-size: 12px; 
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status-saved { background: #27ae60; color: white; }
+        .status-not-saved { background: #e74c3c; color: white; }
+        
+        /* Saved Files List */
+        .saved-files-container {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .saved-files-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        .saved-file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border: 1px solid #ddd;
+        }
+        .saved-file-item.active {
+            background: #d5f5e3;
+            border-color: #27ae60;
+        }
+        .saved-file-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .saved-file-name {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .saved-file-meta {
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+        .saved-file-actions {
+            display: flex;
+            gap: 5px;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2 style="border-left: 5px solid #27ae60; padding-left: 10px;">⚽ Football Stats & Prediction</h2>
+    <h2 style="border-left: 5px solid #27ae60; padding-left: 10px;">
+        ⚽ Football Stats & Prediction 
+        <span id="dataStatus" class="status-badge status-not-saved">No Data</span>
+    </h2>
     <div class="controls">
         <input type="file" id="csvUpload" accept=".csv" style="margin-bottom: 15px;">
-        <div class="btn-group">
+        
+        <!-- ✅ Saved Files Selection -->
+        <div class="saved-files-container" id="savedFilesContainer" style="display: none;">
+            <div class="saved-files-header">📁 Saved Files (Select to Load)</div>
+            <div id="savedFilesList"></div>
+        </div>
+        
+        <div class="btn-group" style="margin-top: 15px;">
             <button onclick="displayLeagueTable('overall', 'all')">Overall All</button>
             <button onclick="displayLeagueTable('overall', 'home')">Overall Home</button>
             <button onclick="displayLeagueTable('overall', 'away')">Overall Away</button>
@@ -59,6 +132,10 @@
         </div>
         <button class="btn-calc" onclick="calculatePrediction()">Calculate Prediction</button>
         <button class="btn-other" onclick="toggleOtherRows()" style="width: 100%; margin-top: 10px;">📊 Other (Show/Hide)</button>
+        <div class="btn-group" style="margin-top: 15px;">
+            <button class="btn-save" onclick="saveDataToStorage()" style="flex:1;">💾 Save Current Data</button>
+            <button class="btn-clear" onclick="clearAllSavedData()" style="flex:1;">🗑️ Clear All Data</button>
+        </div>
     </div>
     <table id="mainTable">
         <thead id="tableHead"></thead>
@@ -68,11 +145,202 @@
 
 <script>
 let rawData = [];
+let currentFileName = '';
 let showOtherRows = false;
+const STORAGE_KEY = 'football_stats_files_v2';
+let savedFiles = [];
+
+// ✅ Load Data from LocalStorage on Page Load
+window.addEventListener('load', () => {
+    loadSavedFilesList();
+});
+
+// ✅ Load Saved Files List from LocalStorage
+function loadSavedFilesList() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    
+    if (saved) {
+        try {
+            savedFiles = JSON.parse(saved);
+            renderSavedFilesList();
+            updateStatusBadge(false);
+            
+            if (savedFiles.length > 0) {
+                document.getElementById('savedFilesContainer').style.display = 'block';
+            }
+        } catch (e) {
+            console.error('❌ Error loading files list:', e);
+            savedFiles = [];
+        }
+    } else {
+        savedFiles = [];
+        updateStatusBadge(false);
+    }
+}
+
+// ✅ Render Saved Files List
+function renderSavedFilesList() {
+    const container = document.getElementById('savedFilesList');
+    
+    if (savedFiles.length === 0) {
+        container.innerHTML = '<p style="color: #7f8c8d; text-align: center;">No saved files yet</p>';
+        document.getElementById('savedFilesContainer').style.display = 'none';
+        return;
+    }
+    
+    document.getElementById('savedFilesContainer').style.display = 'block';
+    
+    container.innerHTML = savedFiles.map((file, index) => `
+        <div class="saved-file-item ${currentFileName === file.name ? 'active' : ''}">
+            <div class="saved-file-info">
+                <span class="saved-file-name">📄 ${file.name}</span>
+                <span class="saved-file-meta">${file.matches} matches | ${file.date}</span>
+            </div>
+            <div class="saved-file-actions">
+                <button class="btn-load" onclick="loadFile(${index})">Load</button>
+                <button class="btn-delete" onclick="deleteFile(${index})">Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ✅ Save New File to LocalStorage
+function saveDataToStorage() {
+    if (rawData.length === 0) {
+        alert("⚠️ သိမ်းဆည်းရန် ဒေတာမရှိပါ။ CSV file အရင်တင်ပါ။");
+        return;
+    }
+    
+    const fileName = prompt("File name သတ်မှတ်ပါ:", currentFileName || "league_data_" + new Date().toISOString().slice(0,10));
+    
+    if (!fileName) return;
+    
+    // Check if file name already exists
+    const existingIndex = savedFiles.findIndex(f => f.name === fileName);
+    
+    if (existingIndex >= 0) {
+        const overwrite = confirm(`"${fileName}" ဖိုင်ရှိပြီးသားဖြစ်သည်။ အစားထိုးသိမ်းဆည်းမလား?`);
+        if (!overwrite) return;
+        savedFiles.splice(existingIndex, 1);
+    }
+    
+    const fileData = {
+        name: fileName,
+        data: rawData,
+        matches: rawData.length,
+        date: new Date().toLocaleString('my-MM')
+    };
+    
+    try {
+        savedFiles.push(fileData);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(savedFiles));
+        currentFileName = fileName;
+        renderSavedFilesList();
+        updateStatusBadge(true);
+        alert(`✅ "${fileName}" သိမ်းဆည်းပြီးပါပြီ! (${rawData.length} matches)`);
+    } catch (e) {
+        console.error('❌ Error saving data:', e);
+        alert("❌ သိမ်းဆည်း၍မရပါ။ Storage ပြည့်နေနိုင်ပါသည်။");
+        savedFiles.pop();
+    }
+}
+
+// ✅ Load Specific File
+function loadFile(index) {
+    if (index < 0 || index >= savedFiles.length) return;
+    
+    const file = savedFiles[index];
+    
+    try {
+        rawData = file.data;
+        currentFileName = file.name;
+        updateTeamDropdowns();
+        updateStatusBadge(true);
+        renderSavedFilesList();
+        document.getElementById('tableBody').innerHTML = '';
+        alert(`✅ "${file.name}" ဝန်ပိုးပြီးပါပြီ! (${file.matches} matches)`);
+    } catch (e) {
+        console.error('❌ Error loading file:', e);
+        alert("❌ ဖိုင်ဝန်ပိုး၍မရပါ။");
+    }
+}
+
+// ✅ Delete Specific File
+function deleteFile(index) {
+    if (index < 0 || index >= savedFiles.length) return;
+    
+    const file = savedFiles[index];
+    const confirmDelete = confirm(`"${file.name}" ကို ဖျက်မည်။ သေချာပါသလား?`);
+    
+    if (!confirmDelete) return;
+    
+    savedFiles.splice(index, 1);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(savedFiles));
+    
+    if (currentFileName === file.name) {
+        rawData = [];
+        currentFileName = '';
+        updateTeamDropdowns();
+        updateStatusBadge(false);
+        document.getElementById('tableBody').innerHTML = '';
+    }
+    
+    renderSavedFilesList();
+    alert(`✅ "${file.name}" ဖျက်ပြီးပါပြီ။`);
+}
+
+// ✅ Clear All Saved Data
+function clearAllSavedData() {
+    const confirmClear = confirm("သိမ်းဆည်းထားသော ဖိုင်အားလုံးကို ဖျက်မည်။ သေချာပါသလား?");
+    
+    if (!confirmClear) return;
+    
+    localStorage.removeItem(STORAGE_KEY);
+    savedFiles = [];
+    rawData = [];
+    currentFileName = '';
+    updateTeamDropdowns();
+    updateStatusBadge(false);
+    document.getElementById('tableBody').innerHTML = '';
+    document.getElementById('savedFilesContainer').style.display = 'none';
+    alert("✅ ဖိုင်အားလုံး ဖျက်ပြီးပါပြီ။");
+}
+
+// ✅ Update Status Badge
+function updateStatusBadge(isSaved) {
+    const badge = document.getElementById('dataStatus');
+    if (isSaved && rawData.length > 0) {
+        badge.textContent = `✓ ${currentFileName || 'Loaded'} (${rawData.length} matches)`;
+        badge.className = 'status-badge status-saved';
+    } else {
+        badge.textContent = 'No Data';
+        badge.className = 'status-badge status-not-saved';
+    }
+}
+
+// ✅ Update Team Dropdowns
+function updateTeamDropdowns() {
+    if (rawData.length === 0) {
+        const hS = document.getElementById('homeTeam'), aS = document.getElementById('awayTeam');
+        hS.innerHTML = aS.innerHTML = '<option value="">အသင်းရွေးပါ</option>';
+        return;
+    }
+    
+    const teams = [...new Set(rawData.map(d => d.HomeTeam))].sort();
+    const hS = document.getElementById('homeTeam'), aS = document.getElementById('awayTeam');
+    hS.innerHTML = aS.innerHTML = '<option value="">အသင်းရွေးပါ</option>';
+    teams.forEach(t => { 
+        hS.add(new Option(t, t)); 
+        aS.add(new Option(t, t)); 
+    });
+}
 
 // CSV Parsing
 document.getElementById('csvUpload').addEventListener('change', (e) => {
-    Papa.parse(e.target.files[0], { 
+    const file = e.target.files[0];
+    const fileName = file ? file.name : 'uploaded_file';
+    
+    Papa.parse(file, { 
         header: true, 
         dynamicTyping: true, 
         skipEmptyLines: true, 
@@ -86,14 +354,10 @@ document.getElementById('csvUpload').addEventListener('change', (e) => {
                     return 0;
                 });
             
-            const teams = [...new Set(rawData.map(d => d.HomeTeam))].sort();
-            const hS = document.getElementById('homeTeam'), aS = document.getElementById('awayTeam');
-            hS.innerHTML = aS.innerHTML = '<option value="">အသင်းရွေးပါ</option>';
-            teams.forEach(t => { 
-                hS.add(new Option(t, t)); 
-                aS.add(new Option(t, t)); 
-            });
-            alert("Data Loaded Successfully! (" + rawData.length + " matches)");
+            currentFileName = fileName;
+            updateTeamDropdowns();
+            updateStatusBadge(false);
+            alert(`Data Loaded Successfully! (${rawData.length} matches)\n💾 သိမ်းဆည်းရန် 'Save Current Data' ခလုတ်ကို နှိပ်ပါ။`);
         }
     });
 });
@@ -294,7 +558,7 @@ function calculateScoringRate(hTeam, aTeam) {
     return scoringRateResult.toString();
 }
 
-// 🔧 HELPER: Get Team Ranking from Overall All Table (အသစ်ထည့်ထားသည်)
+// HELPER: Get Team Ranking from Overall All Table
 function getTeamRanking(team) {
     let stats = {};
     const teams = [...new Set(rawData.map(d => d.HomeTeam))];
@@ -322,13 +586,11 @@ function getTeamRanking(team) {
         });
     });
     
-    // Sort by Points (desc), then Goal Difference (desc)
     const sortedTeams = Object.keys(stats).sort((a, b) => {
         if (stats[b].pts !== stats[a].pts) return stats[b].pts - stats[a].pts;
         return (stats[b].gf - stats[b].ga) - (stats[a].gf - stats[a].ga);
     });
     
-    // Find ranking position
     const rank = sortedTeams.indexOf(team) + 1;
     const total = sortedTeams.length;
     
@@ -392,7 +654,7 @@ function calculatePrediction() {
     // SCORING RATE Calculation
     const scoringRate = calculateScoringRate(hTeam, aTeam);
 
-    // 🆕 RANKING Calculation
+    // RANKING Calculation
     const hRanking = getTeamRanking(hTeam);
     const aRanking = getTeamRanking(aTeam);
     const hRankDisplay = `${hRanking.rank}/${hRanking.total}`;
