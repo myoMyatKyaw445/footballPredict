@@ -112,7 +112,7 @@
     <div class="controls">
         <input type="file" id="csvUpload" accept=".csv" style="margin-bottom: 15px;">
         
-        <!-- ✅ Saved Files Selection -->
+        <!-- Saved Files Selection -->
         <div class="saved-files-container" id="savedFilesContainer" style="display: none;">
             <div class="saved-files-header">📁 Saved Files (Select to Load)</div>
             <div id="savedFilesList"></div>
@@ -150,12 +150,12 @@ let showOtherRows = false;
 const STORAGE_KEY = 'football_stats_files_v2';
 let savedFiles = [];
 
-// ✅ Load Data from LocalStorage on Page Load
+// Load Data from LocalStorage on Page Load
 window.addEventListener('load', () => {
     loadSavedFilesList();
 });
 
-// ✅ Load Saved Files List from LocalStorage
+// Load Saved Files List from LocalStorage
 function loadSavedFilesList() {
     const saved = localStorage.getItem(STORAGE_KEY);
     
@@ -178,7 +178,7 @@ function loadSavedFilesList() {
     }
 }
 
-// ✅ Render Saved Files List
+// Render Saved Files List
 function renderSavedFilesList() {
     const container = document.getElementById('savedFilesList');
     
@@ -204,7 +204,7 @@ function renderSavedFilesList() {
     `).join('');
 }
 
-// ✅ Save New File to LocalStorage
+// Save New File to LocalStorage
 function saveDataToStorage() {
     if (rawData.length === 0) {
         alert("⚠️ သိမ်းဆည်းရန် ဒေတာမရှိပါ။ CSV file အရင်တင်ပါ။");
@@ -215,7 +215,6 @@ function saveDataToStorage() {
     
     if (!fileName) return;
     
-    // Check if file name already exists
     const existingIndex = savedFiles.findIndex(f => f.name === fileName);
     
     if (existingIndex >= 0) {
@@ -239,13 +238,13 @@ function saveDataToStorage() {
         updateStatusBadge(true);
         alert(`✅ "${fileName}" သိမ်းဆည်းပြီးပါပြီ! (${rawData.length} matches)`);
     } catch (e) {
-        console.error('❌ Error saving data:', e);
+        console.error('❌ Error saving ', e);
         alert("❌ သိမ်းဆည်း၍မရပါ။ Storage ပြည့်နေနိုင်ပါသည်။");
         savedFiles.pop();
     }
 }
 
-// ✅ Load Specific File
+// Load Specific File
 function loadFile(index) {
     if (index < 0 || index >= savedFiles.length) return;
     
@@ -265,7 +264,7 @@ function loadFile(index) {
     }
 }
 
-// ✅ Delete Specific File
+// Delete Specific File
 function deleteFile(index) {
     if (index < 0 || index >= savedFiles.length) return;
     
@@ -289,7 +288,7 @@ function deleteFile(index) {
     alert(`✅ "${file.name}" ဖျက်ပြီးပါပြီ။`);
 }
 
-// ✅ Clear All Saved Data
+// Clear All Saved Data
 function clearAllSavedData() {
     const confirmClear = confirm("သိမ်းဆည်းထားသော ဖိုင်အားလုံးကို ဖျက်မည်။ သေချာပါသလား?");
     
@@ -301,12 +300,11 @@ function clearAllSavedData() {
     currentFileName = '';
     updateTeamDropdowns();
     updateStatusBadge(false);
-    document.getElementById('tableBody').innerHTML = '';
     document.getElementById('savedFilesContainer').style.display = 'none';
     alert("✅ ဖိုင်အားလုံး ဖျက်ပြီးပါပြီ။");
 }
 
-// ✅ Update Status Badge
+// Update Status Badge
 function updateStatusBadge(isSaved) {
     const badge = document.getElementById('dataStatus');
     if (isSaved && rawData.length > 0) {
@@ -318,7 +316,7 @@ function updateStatusBadge(isSaved) {
     }
 }
 
-// ✅ Update Team Dropdowns
+// Update Team Dropdowns
 function updateTeamDropdowns() {
     if (rawData.length === 0) {
         const hS = document.getElementById('homeTeam'), aS = document.getElementById('awayTeam');
@@ -668,20 +666,20 @@ function calculatePrediction() {
     const homeWRClass = getColorClass(winRate.homeWR, 'winrate', true);
     const awayWRClass = getColorClass(winRate.awayWR, 'winrate', false);
 
-    // UI Result Updates
+    // ✅ UI Result Updates (ROWS REORDERED - မင်းပြောတဲ့အတိုင်း)
     document.getElementById('tableHead').innerHTML = "<tr><th>Category</th><th>Home (1)</th><th>Draw (X)</th><th>Away (2)</th></tr>";
     document.getElementById('tableBody').innerHTML = `
+        <tr class="result-row winrate-color">
+            <td>🏆 Win/Draw Rate</td>
+            <td class="${homeWRClass}">${winRate.homeWR}</td>
+            <td>${winRate.drawRate}</td>
+            <td class="${awayWRClass}">${winRate.awayWR}</td>
+        </tr>
         <tr class="result-row prob-color">
             <td>Overall Probability %</td>
             <td class="${ovHWClass}">${ovHW}%</td>
             <td>${ovDR}%</td>
             <td class="${ovAWClass}">${ovAW}%</td>
-        </tr>
-        <tr class="result-row odds-color">
-            <td>Overall Decimal Odds</td>
-            <td>${overallOdd.home}</td>
-            <td>${overallOdd.draw}</td>
-            <td>${overallOdd.away}</td>
         </tr>
         <tr class="result-row prob-color" style="background:#e3f2fd;">
             <td>Last 6 Probability %</td>
@@ -689,11 +687,17 @@ function calculatePrediction() {
             <td>${dr6}%</td>
             <td class="${aw6Class}">${aw6}%</td>
         </tr>
-        <tr class="result-row winrate-color">
-            <td>🏆 Win/Draw Rate</td>
-            <td class="${homeWRClass}">${winRate.homeWR}</td>
-            <td>${winRate.drawRate}</td>
-            <td class="${awayWRClass}">${winRate.awayWR}</td>
+        <tr class="result-row odds-color">
+            <td>Overall Decimal Odds</td>
+            <td>${overallOdd.home}</td>
+            <td>${overallOdd.draw}</td>
+            <td>${overallOdd.away}</td>
+        </tr>
+        <tr class="result-row adjusted-color">
+            <td>⚖️ Adjusted Decimal</td>
+            <td>${adjustedHome}</td>
+            <td>${adjustedDraw}</td>
+            <td>${adjustedAway}</td>
         </tr>
         <tr class="result-row points-color">
             <td>📊 Last 6 Points/Goals</td>
@@ -710,12 +714,6 @@ function calculatePrediction() {
         <tr class="result-row scoring-color">
             <td>⚽ Scoring Rate</td>
             <td colspan="3" style="text-align:center; font-size:18px;">${scoringRate}</td>
-        </tr>
-        <tr class="result-row adjusted-color">
-            <td>⚖️ Adjusted Decimal</td>
-            <td>${adjustedHome}</td>
-            <td>${adjustedDraw}</td>
-            <td>${adjustedAway}</td>
         </tr>
         <tr class="result-row odds-color hidden-row" id="row-last6-odd">
             <td>Last 6 Decimal Odds</td>
